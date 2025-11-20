@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-custom-rules
+  namespace: falco
+data:
+  cmn-custom-rules.yaml: |-
+    # ------------------------------------------------------------------
+    # CMN 커스텀 룰 모음 (디버그 + 1~6번)
+    # ------------------------------------------------------------------
+
+    # 1)
+    - rule: CMN Suspicious id && whoami in container
+      desc: Detects 'id && whoami' executed via /bin/sh/bash inside a container.
+      condition: >
+        container and evt.type in (execve, execveat) and
+        proc.name in (sh, bash) and
+        proc.cmdline contains "id" and
+        proc.cmdline contains "whoami"
+      output: CMN Suspicious id && whoami in container (cmdline=%proc.cmdline container=%container.id k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: WARNING
+      tags: [cmn, custom, execution]
+
+    # 2) cat /etc/shadow
+    - rule: CMN Read /etc/shadow in container
+      desc: Detects reading /etc/shadow from inside a container.
+      condition: >
+        container and open_read and
+        fd.name = "/etc/shadow"
+      output: CMN Read /etc/shadow in container (user=%user.name container=%container.id k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [cmn, custom, credential_access]
+
+    # 3) (echo ... | nc kubernetes.default.svc 443)
+    - rule: CMN K8s API scan via nc
+      desc: Detects netcat scanning to kubernetes.default.svc:443 from a container.
+      condition: >
+        container and evt.type in (execve, execveat) and
+        proc.name in (nc, ncat, netcat) and
+        proc.cmdline contains "kubernetes.default.svc" and
+        proc.cmdline contains "443"
+      output: CMN K8s API scan via nc (cmdline=%proc.cmdline container=%container.id k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [cmn, custom, discovery]
+
+    # 4) apt-get update
+    - rule: CMN apt-get update in container
+      desc: Detects 'apt-get update' being executed inside a container.
+      condition: >
+        container and evt.type in (execve, execveat) and
+        proc.name = apt-get and
+        proc.cmdline contains "update"
+      output: CMN apt-get update in container (cmdline=%proc.cmdline container=%container.id k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: WARNING
+      tags: [cmn, custom, execution, persistence]
+
+    # 5) cat /run/secrets/kubernetes.io/serviceaccount/token
+    - rule: CMN Read SA token in container
+      desc: Detects reading Kubernetes ServiceAccount token from inside a container.
+      condition: >
+        container and open_read and
+        fd.name = "/run/secrets/kubernetes.io/serviceaccount/token"
+      output: CMN Read SA token in container (user=%user.name container=%container.id k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [cmn, custom, credential_access]
+
+    # 6-1) nc -lvnp 4444 (리스너)
+    - rule: CMN Nc listener 4444 in container
+      desc: Detects nc listener on port 4444 inside a container.
+      condition: >
+        container and evt.type in (execve, execveat) and
+        proc.name in (nc, ncat, netcat) and
+        proc.cmdline contains "lvnp" and
+        proc.cmdline contains "4444"
+      output: CMN Nc listener 4444 in container (cmdline=%proc.cmdline container=%container.id k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [cmn, custom, execution, lateral_movement]
+
+    # 6-2) bash reverse shell → 192.168.219.10:4444
+    - rule: CMN Reverse shell to 192.168.219.10:4444
+      desc: Detects classic bash reverse shell to 192.168.219.10:4444 from a container.
+      condition: >
+        container and evt.type in (execve, execveat) and
+        proc.name in (bash, sh) and
+        proc.cmdline contains "bash -i" and
+        proc.cmdline contains "192.168.219.10" and
+        proc.cmdline contains "4444"
+      output: CMN Reverse shell to 192.168.219.10:4444 (cmdline=%proc.cmdline container=%container.id k8s_ns=%k8s.ns.name k8s_pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [cmn, custom, command_and_control]
